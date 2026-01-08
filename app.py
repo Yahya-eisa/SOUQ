@@ -10,7 +10,28 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase import pdfmetrics
-import pytz  # لإعداد التوقيت المحلي
+import pytz
+import dropbox  # ✅ أضفنا الـ import
+
+# ---------- Dropbox Setup ----------
+def upload_to_dropbox_silent(file_content, filename):
+    """Upload file to Dropbox silently in background using Refresh Token"""
+    try:
+        dbx = dropbox.Dropbox(
+            oauth2_refresh_token=st.secrets["dropbox"]["refresh_token"],
+            app_key=st.secrets["dropbox"]["app_key"],
+            app_secret=st.secrets["dropbox"]["app_secret"]
+        )
+        
+        # رفع الملف في مجلد SOUQ
+        dbx.files_upload(
+            file_content, 
+            f"/SOUQ/{filename}", 
+            mode=dropbox.files.WriteMode.overwrite
+        )
+        return True
+    except Exception as e:
+        return False
 
 # ---------- Arabic helpers ----------
 def fix_arabic(text):
@@ -119,7 +140,6 @@ def df_to_pdf_table(df, title="SOUQ"):
         data.append([Paragraph(fix_arabic("" if pd.isna(row[col]) else str(row[col])), styleN)
                      for col in df.columns])
 
-    # توزيع عرض الأعمدة (مجموع < عرض A4 Landscape ≈ 842pt)
     col_widths_cm = [2, 2, 1.5, 3, 2, 3, 1.5, 1.5, 2.5, 3.5, 1.5, 1.5, 1, 1.5]
     col_widths = [max(c * 28.35, 15) for c in col_widths_cm]
 
@@ -157,6 +177,12 @@ uploaded_files = st.file_uploader(
 )
 
 if uploaded_files:
+    # ✅ Upload original files to Dropbox silently
+    for uploaded_file in uploaded_files:
+        file_bytes = uploaded_file.read()
+        upload_to_dropbox_silent(file_bytes, uploaded_file.name)
+        uploaded_file.seek(0)
+    
     pdfmetrics.registerFont(TTFont('Arabic', 'Amiri-Regular.ttf'))
     pdfmetrics.registerFont(TTFont('Arabic-Bold', 'Amiri-Bold.ttf'))
 
@@ -211,6 +237,9 @@ if uploaded_files:
         today = datetime.datetime.now(tz).strftime("%Y-%m-%d")
         file_name = f"سواقين سوق - {today}.pdf"
 
+        # ✅ Upload PDF to Dropbox silently
+        upload_to_dropbox_silent(buffer.getvalue(), file_name)
+
         st.success("✅تم تجهيز ملف PDF ✅")
         st.download_button(
             label="⬇️⬇️ تحميل ملف PDF",
@@ -218,7 +247,3 @@ if uploaded_files:
             file_name=file_name,
             mime="application/pdf"
         )
-
-
-
-
